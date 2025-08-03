@@ -310,6 +310,38 @@ impl SourceBlockEncoder {
         }
         result
     }
+
+    pub fn get_range(&self, start: usize, length: usize) -> impl Iterator<Item = EncodingPacket> {
+        let source_part_begin = start;
+        let source_part_end = (start + length).min(self.source_symbols.len());
+        let mut source_part = vec![];
+
+        if source_part_begin < source_part_end {
+            source_part.reserve_exact(source_part_end - source_part_begin);
+            for i in source_part_begin..source_part_end {
+                let symbol = &self.source_symbols[i];
+                source_part.push(EncodingPacket::new(
+                    PayloadId::new(self.source_block_id, i as u32),
+                    symbol.as_bytes().to_vec(),
+                ));
+            }
+        }
+
+        let mut repair_part = None;
+        if start + length > self.source_symbols.len() {
+            let start_repair_id =
+                (start.max(self.source_symbols.len()) - self.source_symbols.len()) as u32;
+            let end_repair_id = ((start + length) - self.source_symbols.len()) as u32;
+            repair_part =
+                Some(self.repair_packets(start_repair_id, end_repair_id - start_repair_id));
+        }
+
+        let source_part = source_part.into_iter();
+        let repair_part = repair_part
+            .into_iter()
+            .flat_map(|repair_part| repair_part.into_iter());
+        source_part.chain(repair_part)
+    }
 }
 
 #[allow(non_snake_case)]
